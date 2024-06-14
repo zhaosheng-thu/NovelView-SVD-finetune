@@ -826,8 +826,10 @@ if __name__ == "__main__":
 
         trainer.logdir = logdir  ###
 
+        print("up to prepare for data")
         # data
         data = instantiate_from_config(config.data)
+        print("data", data)
         # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
         # calling these ourselves should not be necessary but it is.
         # lightning still takes care of proper multiprocessing though

@@ -1,8 +1,8 @@
 from functools import partial
 from typing import List, Optional, Union
 
-from einops import rearrange
-
+from einops import rearrange, repeat
+import torch
 from ...modules.diffusionmodules.openaimodel import *
 from ...modules.video_attention import SpatialVideoTransformer
 from ...util import default
@@ -171,7 +171,7 @@ class VideoUNet(nn.Module):
                     ),
                 )
 
-            elif self.num_classes == "sequential":
+            elif self.num_classes == "sequential": # seq
                 assert adm_in_channels is not None
                 self.label_emb = nn.Sequential(
                     nn.Sequential(
@@ -443,8 +443,8 @@ class VideoUNet(nn.Module):
         self,
         x: th.Tensor,
         timesteps: th.Tensor,
-        context: Optional[th.Tensor] = None,
-        y: Optional[th.Tensor] = None,
+        context: Optional[th.Tensor] = None, # context=c.get("crossattn", None), corresponding to the condition_frames_w/o_noise
+        y: Optional[th.Tensor] = None, # y=c.get("vector", None), # y is the vector, corresponding to the azimuthal, angle and z
         time_context: Optional[th.Tensor] = None,
         num_video_frames: Optional[int] = None,
         image_only_indicator: Optional[th.Tensor] = None,
@@ -455,13 +455,16 @@ class VideoUNet(nn.Module):
         hs = []
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
         emb = self.time_embed(t_emb)
-
+        print("t_embed.size in video_model.py", emb.shape) # bs * f, 1280
+        # emb torch.size[bs * f, 1280] if with bs * 2 * f,1280
         if self.num_classes is not None:
             assert y.shape[0] == x.shape[0]
             emb = emb + self.label_emb(y)
 
         h = x
-        for module in self.input_blocks:
+        print("h size in video_model.py", h.shape, "emb size", emb.size, "context size", context.size) 
+        # h size torch.size[bs * f, 8(c*2), 72, 72] emb size torch.size[bs * f, 1280] context size torch.size[bs * f, 1, 1024]
+        for module in self.input_blocks: # ModuleList(TimestepEmbedSequential,  2 x TimestepEmbedSequential((0): VideoResBlock(...)))
             h = module(
                 h,
                 emb,
@@ -470,6 +473,10 @@ class VideoUNet(nn.Module):
                 time_context=time_context,
                 num_video_frames=num_video_frames,
             )
+            # h shape [bs * f * 2,320,72,72] * 3
+            # [42,320,36,36] * 3
+            # [42,320,18,18] * 3
+            # [42,320,9,9] * 3
             hs.append(h)
         h = self.middle_block(
             h,
@@ -491,3 +498,81 @@ class VideoUNet(nn.Module):
             )
         h = h.type(x.dtype)
         return self.out(h)
+
+
+class LinearProjectionAdapter(nn.Module): # The projection adapter in NovelViewSynthesis TODO: whether we need norm? and silu?
+    def __init__(self, input_depth, output_depth, height, width):
+        super(LinearProjectionAdapter, self).__init__()
+        self.input_depth = input_depth
+        self.height = height
+        self.width = width
+        self.output_depth = output_depth
+        self.fc = nn.Linear(height * width * input_depth, output_depth * height * width)
+
+    def forward(self, x):
+        # x: (batch_size, f1(input_depth), C, H, W)
+        batch_size, f, C, H, W = x.size()
+        assert H == self.height and W == self.width and f == self.input_depth, "Input height and width must match the initialized dimensions."
+
+        x = x.view(batch_size, C, -1) # (batch_size, f, C, H, W) -> (batch_size, C, f1*H*W)
+
+        # Linear (batch_size, C, f1(input_depth)*H*W) -> (batch_size, C, f2(out_depth)*H*W)
+        x = self.fc(x)
+
+        x = x.view(batch_size, self.output_depth, C, self.height, self.width) # (batch_size, C, f2*H*W) -> (batch_size, f2, C, H, W)
+
+        return x
+
+class NovelViewUNet(VideoUNet): # The network model
+    def __init__(self, 
+        latent_size: int,
+        depth: int,
+        *args, 
+        **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        
+        self.latent_size = latent_size
+        self.depth = depth 
+        self.projection_adapter_in = LinearProjectionAdapter(
+            input_depth=1,
+            output_depth=depth,
+            height=latent_size,
+            width=latent_size
+        )
+        self.projection_adapter_out = LinearProjectionAdapter(
+            input_depth=depth,
+            output_depth=1,
+            height=latent_size,
+            width=latent_size
+        )
+
+    def forward(
+        self,
+        x: th.Tensor,
+        timesteps: th.Tensor,
+        context: Optional[th.Tensor] = None, # context=c.get("crossattn", None), corresponding to the condition_frames_w/o_noise
+        concat: Optional[th.Tensor] = None, # concat=c.get("concat", None)
+        y: Optional[th.Tensor] = None, # y=c.get("vector", None), # y is the vector, corresponding to the azimuthal, angle and z
+        time_context: Optional[th.Tensor] = None,
+        num_video_frames: Optional[int] = None,
+        image_only_indicator: Optional[th.Tensor] = None,
+    ):
+        
+        # x: (batch_size, f1(input_depth=1), C, H, W) -> (batch_size, f2(depth), C, H, W)
+        x = self.projection_adapter_in(x)
+        x = rearrange(x, "b f c h w -> (b f) c h w") # rearrange for the input shape of network video_unet (b*f, c, h, w)
+        
+        # add the concat that initially in the wrapper.py here becasue wewanna a concat with depth of latent
+        x = torch.cat((x, concat.type_as(x)), dim=1)
+        
+        # timestep [bs] -> [bs * depth], just repeat, becasue the noise is added to the 2D latent
+        timesteps = repeat(timesteps, "b -> (b f)", f=self.depth)
+        
+        x = super().forward(x, timesteps, context, y, time_context, num_video_frames, image_only_indicator)
+        
+        x = rearrange(x, "(b f) c h w -> b f c h w", f=self.depth)
+        # x: (batch_size, f2(depth), C, H, W) -> (batch_size, f1(input_depth=1), C, H, W)
+        x = self.projection_adapter_out(x)
+        
+        return x

@@ -4,6 +4,7 @@ import sys
 from glob import glob
 from pathlib import Path
 from typing import List, Optional
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "../../")))
 import cv2
@@ -22,19 +23,19 @@ from torchvision.transforms import ToTensor
 
 
 def sample(
-    input_path: str = "assets/test_image.png",  # Can either be image file or folder with image files
+    input_path: str = "outputs/simple_video_sample/sv3d_u/000000.jpg",  # Can either be image file or folder with image files
     num_frames: Optional[int] = None,  # 21 for SV3D
     num_steps: Optional[int] = None,
-    version: str = "svd",
+    version: str = "sv3d_p",
     fps_id: int = 6,
     motion_bucket_id: int = 127,
     cond_aug: float = 0.02,
     seed: int = 23,
-    decoding_t: int = 14,  # Number of frames decoded at a time! This eats most VRAM. Reduce if necessary.
+    decoding_t: int = 6,  # Number of frames decoded at a time! This eats most VRAM. Reduce if necessary.
     device: str = "cuda",
     output_folder: Optional[str] = None,
-    elevations_deg: Optional[float | List[float]] = 10.0,  # For SV3D
-    azimuths_deg: Optional[List[float]] = None,  # For SV3D
+    elevations_deg: Optional[float | List[float]] = [20,15,10,10,0,0,0,5,5,0,0,0,-5,-10,-10,-10,-15,-20,-20,-20,-20],  # For SV3D
+    azimuths_deg: Optional[List[float]] = [1,20,35,50,60,75,90,110,125,140,160,180,200,210,220,240,260,280,300,320,340],  # For SV3D
     image_frame_ratio: Optional[float] = None,
     verbose: Optional[bool] = False,
 ):
@@ -77,7 +78,7 @@ def sample(
         num_frames = 21
         num_steps = default(num_steps, 50)
         output_folder = default(output_folder, "outputs/simple_video_sample/sv3d_p/")
-        model_config = "scripts/sampling/configs/sv3d_p.yaml"
+        model_config = "/root/szhao/generative-models/scripts/sampling/configs/sv3d_p.yaml"
         cond_aug = 1e-5
         if isinstance(elevations_deg, float) or isinstance(elevations_deg, int):
             elevations_deg = [elevations_deg] * num_frames
@@ -102,6 +103,18 @@ def sample(
         num_steps,
         verbose,
     )
+    
+    state_dict_keys = []
+    state_dict_vals = []
+
+    # print("model", model.first_stage_model)
+    # for k in model.state_dict().keys():
+    #     if "diffusion_model.out." in k:
+    #         state_dict_keys.append(k)
+    #         state_dict_vals.append(model.state_dict()[k])
+    #         print("k", k, model.state_dict()[k].shape)
+    # print("/nYes")if isinstance(model.first_stage_model.decoder, VideoDecoder) else print("No")
+
     torch.manual_seed(seed)
 
     path = Path(input_path)
@@ -220,6 +233,10 @@ def sample(
                     T=num_frames,
                     device=device,
                 )
+                
+                print("batch_keys", batch.keys())
+                # out batch_c = {"cond_aug", "cond_frames", "cond_frames_without_noise", shape(torch.size[1,3,576,576])}
+                
                 c, uc = model.conditioner.get_unconditional_conditioning(
                     batch,
                     batch_uc=batch_uc,
@@ -228,15 +245,18 @@ def sample(
                         "cond_frames_without_noise",
                     ],
                 )
-
+                # c = {"crossattn", shape(torch.size[1,1,1024]);"concat", shape(torch.size[1,4,72,72]; "vector", shape(torch.size[21,256]}
                 for k in ["crossattn", "concat"]:
                     uc[k] = repeat(uc[k], "b ... -> b t ...", t=num_frames)
                     uc[k] = rearrange(uc[k], "b t ... -> (b t) ...", t=num_frames)
                     c[k] = repeat(c[k], "b ... -> b t ...", t=num_frames)
+                    # "crossattn" c[k] = shape(torch.size[1,21,1,1024])
                     c[k] = rearrange(c[k], "b t ... -> (b t) ...", t=num_frames)
-
+                    # "crossattn" c[k] = shape(torch.size[21,1,1024])
+                    
                 randn = torch.randn(shape, device=device)
-
+                # shape (21,4,72,72)
+                
                 additional_model_inputs = {}
                 additional_model_inputs["image_only_indicator"] = torch.zeros(
                     2, num_frames
@@ -244,13 +264,19 @@ def sample(
                 additional_model_inputs["num_video_frames"] = batch["num_video_frames"]
 
                 def denoiser(input, sigma, c):
+                    print("input", input.shape)
+                    print("sigma", sigma.shape)
+                    # print("c", c.shape)
                     return model.denoiser(
                         model.model, input, sigma, c, **additional_model_inputs
                     )
 
                 samples_z = model.sampler(denoiser, randn, cond=c, uc=uc)
+                print("samples_z", samples_z.shape)
                 model.en_and_decode_n_samples_a_time = decoding_t
                 samples_x = model.decode_first_stage(samples_z)
+                print("samples_x", samples_x.shape)
+                1 / 0
                 if "sv3d" in version:
                     samples_x[-1:] = value_dict["cond_frames_without_noise"]
                 samples = torch.clamp((samples_x + 1.0) / 2.0, min=0.0, max=1.0)

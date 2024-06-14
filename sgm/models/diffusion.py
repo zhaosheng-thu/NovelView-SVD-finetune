@@ -49,6 +49,11 @@ class DiffusionEngine(pl.LightningModule):
         self.model = get_obj_from_str(default(network_wrapper, OPENAIUNETWRAPPER))(
             model, compile_model=compile_model
         )
+        # print the num of the learnable and non-learnable parameters in the model
+        num_learnable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        num_non_learnable_params = sum(p.numel() for p in self.model.parameters() if not p.requires_grad)
+        print(f"Number of learnable parameters in Unet: {num_learnable_params}")
+        print(f"Number of non-learnable parameters in Unet: {num_non_learnable_params}")
 
         self.denoiser = instantiate_from_config(denoiser_config)
         self.sampler = (
@@ -112,7 +117,11 @@ class DiffusionEngine(pl.LightningModule):
     def get_input(self, batch):
         # assuming unified data format, dataloader returns a dict.
         # image tensors should be scaled to -1 ... 1 and in bchw format
+        for k, v in batch.items():
+            print(k, v.shape)
+        print("input_key in get_input diffusion.py: ", self.input_key)
         return batch[self.input_key]
+    
 
     @torch.no_grad()
     def decode_first_stage(self, z):
@@ -136,7 +145,16 @@ class DiffusionEngine(pl.LightningModule):
 
     @torch.no_grad()
     def encode_first_stage(self, x):
-        n_samples = default(self.en_and_decode_n_samples_a_time, x.shape[0])
+        # x shape [bs, f, c, h, w] [bs, 1, 3, 256, 256]
+        # TODO: check whether reshape x to [bs, 3, 256, 256] is necessary
+        reshape_x = False
+        if len(x.shape) == 5:
+            reshape_x = True
+            bs, f, c, h, w = x.shape
+            x = x.view(bs * f, c, h, w)
+            
+        n_samples = default(self.en_and_decode_n_samples_a_time, x.shape[0]) # bs * f
+        print("n_samples: in diffusion ", n_samples)
         n_rounds = math.ceil(x.shape[0] / n_samples)
         all_out = []
         with torch.autocast("cuda", enabled=not self.disable_first_stage_autocast):
@@ -146,18 +164,28 @@ class DiffusionEngine(pl.LightningModule):
                 )
                 all_out.append(out)
         z = torch.cat(all_out, dim=0)
+        print("z shape in diffusion: ", z.shape)
+        
+        if reshape_x: # id encoder_config is used (not nn.Identity), we should '//8'
+            z = z.view(bs, f, 4, h // 8, w // 8)
+            
         z = self.scale_factor * z
         return z
 
-    def forward(self, x, batch):
+    def forward(self, x, batch): # TODO: add the target image
+        # print("batch_keys in  diffusion.py", batch.keys())
+        # for k, v in batch.items():
+        #     print(k, v.shape) if isinstance(v, torch.Tensor) else print(k, len(v))
         loss = self.loss_fn(self.model, self.denoiser, self.conditioner, x, batch)
         loss_mean = loss.mean()
         loss_dict = {"loss": loss_mean}
         return loss_mean, loss_dict
 
     def shared_step(self, batch: Dict) -> Any:
-        x = self.get_input(batch)
+        x = self.get_input(batch) # x [bs, f, c, h, w], f = 1
+        print("x(input)", x.shape)
         x = self.encode_first_stage(x)
+        print("x(encoded)", x.shape) # x(encoded) torch.Size([8, 1, 4, 72, 72]) f = 1, bs = 8
         batch["global_step"] = self.global_step
         loss, loss_dict = self(x, batch)
         return loss, loss_dict

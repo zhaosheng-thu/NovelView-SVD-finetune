@@ -53,7 +53,22 @@ class StandardDiffusionLoss(nn.Module):
         input: torch.Tensor,
         batch: Dict,
     ) -> torch.Tensor:
+        # 
+        from einops import rearrange, repeat
+        for k in ['cond_frames', 'cond_frames_without_noise']:
+            batch[k] = rearrange(batch[k], "b f ... -> (b f) ...") # rearange to satisfy the assert in FrozenOpenCLIPImageEmbedder
+        # for k in ['polars_rad', 'azimuths_rad', 'height_z', 'cond_aug']:
+        #     print(k, batch[k].shape)
+        #     print(batch['cond_aug'])
+        #     print(batch['polars_rad'])
+        #     assert torch.all(batch[k] == batch[k][0]) # 不一样的bs不同，怎么处理呢
+        #     batch[k] = batch[k][0]
+        
         cond = conditioner(batch)
+        print("cond_keys in loss.py", cond.keys()) # TODO: check cond_keys and val shape
+        for k, v in cond.items():
+            print("in loss.py", k, v.shape)
+            
         return self._forward(network, denoiser, cond, input, batch)
 
     def _forward(
@@ -81,7 +96,8 @@ class StandardDiffusionLoss(nn.Module):
                 input.ndim,
             )
         sigmas_bc = append_dims(sigmas, input.ndim)
-        noised_input = self.get_noised_input(sigmas_bc, noise, input)
+        noised_input = self.get_noised_input(sigmas_bc, noise, input) # bs, 1, 4, 72, 72
+        print("noised_input shape in loss.py", noised_input.shape)
 
         model_output = denoiser(
             network, noised_input, sigmas, cond, **additional_model_inputs

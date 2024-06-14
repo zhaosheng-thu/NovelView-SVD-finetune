@@ -215,12 +215,13 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
     """
     if not repeat_only:
         half = dim // 2
+        # max_period = 10000
         freqs = torch.exp(
             -math.log(max_period)
             * torch.arange(start=0, end=half, dtype=torch.float32)
             / half
         ).to(device=timesteps.device)
-        args = timesteps[:, None].float() * freqs[None]
+        args = timesteps[:, None].float() * freqs[None] # broadcasting, timestep [21] --> [21,1]; freqs [256] --> [1,256]; args [21,256]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
             embedding = torch.cat(
@@ -229,6 +230,7 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
     else:
         embedding = repeat(timesteps, "b -> b d", d=dim)
     return embedding
+    # (t)embedding size[42,320]  (camera_pos)[21,512]
 
 
 def zero_module(module):

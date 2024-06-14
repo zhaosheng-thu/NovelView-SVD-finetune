@@ -124,6 +124,7 @@ class GeneralConditioner(nn.Module):
         if force_zero_embeddings is None:
             force_zero_embeddings = []
         for embedder in self.embedders:
+            # FrozenOpenCLIPImagePredictionEmbedder, VideoPredictionEmbedderWithEncoder, ConcatTimestepEmbedderND.
             embedding_context = nullcontext if embedder.is_trainable else torch.no_grad
             with embedding_context():
                 if hasattr(embedder, "input_key") and (embedder.input_key is not None):
@@ -694,7 +695,8 @@ class FrozenOpenCLIPImageEmbedder(AbstractEmbModel):
         # if self.max_crops > 0:
         #    img = self.preprocess_by_cropping(img)
         if img.dim() == 5:
-            assert self.max_crops == img.shape[1]
+            print("max_crop in modules.py", self.max_crops, img.shape[1])
+            assert self.max_crops == img.shape[1] # TODO: here assets
             img = rearrange(img, "b n c h w -> (b n) c h w")
         img = self.preprocess(img)
         if not self.output_tokens:
@@ -922,12 +924,25 @@ class ConcatTimestepEmbedderND(AbstractEmbModel):
         if x.ndim == 1:
             x = x[:, None]
         assert len(x.shape) == 2
-        b, dims = x.shape[0], x.shape[1]
+        b, dims = x.shape[0], x.shape[1] # bs, dim 21, 1
         x = rearrange(x, "b d -> (b d)")
         emb = self.timestep(x)
         emb = rearrange(emb, "(b d) d2 -> b (d d2)", b=b, d=dims, d2=self.outdim)
+        return emb # out azimuth [21,512] elevation [21,512]
+    
+    
+class NVConcatTimestepEmbedderND(ConcatTimestepEmbedderND):
+    def __init__(self, outdim):
+        super().__init__(outdim)
+        
+    def forward(self, x):
+        # TODO: check the shape of x and the f
+        assert x.ndim == 2 # bs, f
+        bs, f = x.shape[0], x.shape[1]
+        x = rearrange(x, "b f -> (b f)")
+        emb = self.timestep(x)
         return emb
-
+        
 
 class GaussianEncoder(Encoder, AbstractEmbModel):
     def __init__(
