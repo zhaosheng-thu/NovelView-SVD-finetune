@@ -26,9 +26,10 @@ class OpenAIWrapper(IdentityWrapper):
         self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs
     ) -> torch.Tensor:
         print("x.shape in OpenaiWrapper wrappers.py", x.shape)
-        print("x.shape in wrappers.py", c.get("concat", None).shape, c.get("crossattn", None).shape), c.get("vector", None).shape
+        print("c_noise(timestep) in wrappers.py", t.shape)
+        print("shape in wrappers.py", c.get("concat", None).shape, c.get("crossattn", None).shape), c.get("vector", None).shape
         assert x.shape == c.get("concat", None).shape
-        # x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=1) remove this concat, and we concat that
+        x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=1) # remove this concat, and we concat that
         return self.diffusion_model(
             x,
             timesteps=t,

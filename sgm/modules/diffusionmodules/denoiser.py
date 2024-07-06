@@ -55,17 +55,17 @@ class NVDenoiser(Denoiser):
     def forward(
         self,
         network: nn.Module,
-        input: torch.Tensor, # shape(torch.size[B,F,C,72,72]) here f = 1 for the first frame(input_depth)
+        input: torch.Tensor, # shape(torch.size[b, f, c, W//F, H//F]) here f = 1 for the first frame(input_depth)
         sigma: torch.Tensor,
         cond: Dict, # c = {"crossattn", shape(torch.size[1,1,1024]);"concat", shape(torch.size[1,4,72,72]; "vector", shape(torch.size[21,256]}
         **additional_model_inputs,
     ) -> torch.Tensor:
         
         bs, num_frames = input.shape[:2]
-        assert num_frames == 1, f"num_frames = 1, becasue our input is just image, Expected num_frames to be 1, got {num_frames}"
+        if num_frames != 1: # for SV3D, not NV
+            input = rearrange(input, "b f ... -> (b f) ...")
         num_frames = self.depth # change here
-        # input = rearrange(input, "b t ... -> (b t) ...") # rearrange for the input shape of network video_unet (b*f, c, h, w)
-        
+        print("input.shape in denoiser.py", input.shape)
         # similar to the process in sampler
         for k in ["crossattn", "concat"]: 
             cond[k] = repeat(cond[k], "b ... -> b t ...", t=num_frames)
@@ -73,10 +73,10 @@ class NVDenoiser(Denoiser):
             cond[k] = rearrange(cond[k], "b t ... -> (b t) ...", t=num_frames)
         
         additional_model_inputs = {}
-        # TODO: The image_omly_indicator
+        # TODO: The image_omly_indicator, check the shape
         additional_model_inputs["image_only_indicator"] = torch.zeros(
-            2, num_frames
-        ).to(input.device, input.dtype)
+            bs, num_frames
+        ).to(input.device, input.dtype) 
         additional_model_inputs["num_video_frames"] = num_frames
                     
         sigma = self.possibly_quantize_sigma(sigma)

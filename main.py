@@ -258,7 +258,7 @@ class SetupCallback(Callback):
                 ckpt_path = os.path.join(self.ckptdir, "last.ckpt")
             else:
                 ckpt_path = os.path.join(self.ckptdir, self.ckpt_name)
-            trainer.save_checkpoint(ckpt_path)
+            trainer.save_checkpoint(ckpt_path) # Here, if we meet the exception, don't save the checkpoint.
 
     def on_fit_start(self, trainer, pl_module):
         if trainer.global_rank == 0:
@@ -488,7 +488,7 @@ def init_wandb(save_dir, opt, config, group_name, name_str):
     else:
         wandb.init(
             project=opt.projectname,
-            config=config,
+            # config=config,
             settings=wandb.Settings(code_dir="./sgm"),
             group=group_name,
             name=name_str,
@@ -640,6 +640,8 @@ if __name__ == "__main__":
 
         # default to gpu
         trainer_config["accelerator"] = "gpu"
+        ## TODO:06, for the error in dataLoader, we need to set the start method to spawn
+        torch.multiprocessing.set_start_method('spawn')
         #
         standard_args = default_trainer_args()
         for k in standard_args:
@@ -694,6 +696,7 @@ if __name__ == "__main__":
             except:
                 group_name = nowname
             default_logger_cfg["params"]["group"] = group_name
+            
             init_wandb(
                 os.path.join(os.getcwd(), logdir),
                 opt=opt,
@@ -766,10 +769,10 @@ if __name__ == "__main__":
                     "ckpt_name": melk_ckpt_name,
                 },
             },
-            "image_logger": {
-                "target": "main.ImageLogger",
-                "params": {"batch_frequency": 1000, "max_images": 4, "clamp": True},
-            },
+            # "image_logger": {
+            #     "target": "main.ImageLogger",
+            #     "params": {"batch_frequency": 1000, "max_images": 4, "clamp": True},
+            # },
             "learning_rate_logger": {
                 "target": "pytorch_lightning.callbacks.LearningRateMonitor",
                 "params": {
@@ -883,7 +886,7 @@ if __name__ == "__main__":
                     ckpt_path = os.path.join(ckptdir, "last.ckpt")
                 else:
                     ckpt_path = os.path.join(ckptdir, melk_ckpt_name)
-                trainer.save_checkpoint(ckpt_path)
+                trainer.save_checkpoint(ckpt_path) # TODO: remove this of we meet the exception
 
         def divein(*args, **kwargs):
             if trainer.global_rank == 0:

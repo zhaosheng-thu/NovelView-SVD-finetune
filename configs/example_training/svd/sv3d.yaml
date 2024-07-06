@@ -1,10 +1,10 @@
 model:
-  base_learning_rate: 1.0e-4 #
+  base_learning_rate: 2.0e-5 #
   target: sgm.models.diffusion.DiffusionEngine
   params:
     scale_factor: 0.18215
     disable_first_stage_autocast: True
-    ckpt_path: checkpoints/sv3d_p_with_vae.safetensors # this is the path for model weights with vae
+    ckpt_path: checkpoints/sv3d_p.safetensors # this is the path for model weights with vae
     input_key: target_frames_without_noise # this is the key for the target frames
 
     denoiser_config:
@@ -14,13 +14,11 @@ model:
         scaling_config:
           target: sgm.modules.diffusionmodules.denoiser_scaling.VScalingWithEDMcNoise
 
-    network_wrapper: "sgm.modules.diffusionmodules.wrappers.NVWrapper"
+    network_wrapper: sgm.modules.diffusionmodules.wrappers.OpenAIWrapper
 
     network_config:
-      target: sgm.modules.diffusionmodules.video_model.NovelViewUNet # use NovelViewUnet
+      target: sgm.modules.diffusionmodules.video_model.VideoUNet # use NovelViewUnet
       params:
-        latent_size: 32
-        depth: 21
         adm_in_channels: 1280 # here adm_in_channels should equals to sum of vector shape[-1](cond_aug, polars_rad, azimuths_rad, height_z)
         num_classes: sequential
         use_checkpoint: True
@@ -84,29 +82,29 @@ model:
                   target: torch.nn.Identity
 
         - input_key: cond_aug
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
-            outdim: 320 # changed
+            outdim: 256 # changed
 
         - input_key: polars_rad
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
-            outdim: 320
+            outdim: 512
 
         - input_key: azimuths_rad
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
-            outdim: 320
+            outdim: 512
 
-        ## Train this embedderND
-        - input_key: height_z
-          is_trainable: True # TODO: check if this needs set to trainable
-          target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
-          params:
-            outdim: 320
+        # Train this embedderND
+        # - input_key: height_z
+        #   is_trainable: True # TODO: check if this needs set to trainable
+        #   target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
+        #   params:
+        #     outdim: 320
 
     first_stage_config:
       target: sgm.models.autoencoder.AutoencodingEngine
@@ -114,42 +112,11 @@ model:
         loss_config:
           target: torch.nn.Identity
         regularizer_config:
-          target: sgm.modules.autoencoding.regularizers.DiagonalGaussianRegularizer # Debugging
-        # mutiply the encoder_config because we need to encode the first stage, choose this one if we have merged the safetensor
+          target: torch.nn.Identity # Debugging
+        # mutiply the encoder_config because we need to encode the first stage, choose this one if we have merged the safetensor 
+        # or this one, if we have already prepared all the latents by vae
         encoder_config:
-          target: sgm.modules.diffusionmodules.model.Encoder # sgm.models.autoencoder.AutoencoderKLModeOnly
-          params:
-            attn_type: vanilla-xformers
-            double_z: True
-            z_channels: 4
-            resolution: 256
-            in_channels: 3
-            out_ch: 3
-            ch: 128
-            ch_mult: [ 1, 2, 4, 4 ]
-            num_res_blocks: 2
-            attn_resolutions: [ ]
-            dropout: 0.0
-        # or this one
-        # encoder_config:
-        #   target: sgm.models.autoencoder.AutoencoderKLModeOnly
-        #   params:
-        #     embed_dim: 4
-        #     monitor: val/rec_loss
-        #     ddconfig:
-        #       attn_type: vanilla-xformers
-        #       double_z: True
-        #       z_channels: 4
-        #       resolution: 256
-        #       in_channels: 3
-        #       out_ch: 3
-        #       ch: 128
-        #       ch_mult: [1, 2, 4, 4]
-        #       num_res_blocks: 2
-        #       attn_resolutions: []
-        #       dropout: 0.0
-        #     lossconfig:
-        #       target: torch.nn.Identity
+          target: torch.nn.Identity
         decoder_config:
           target: sgm.modules.diffusionmodules.model.Decoder
           params:
@@ -166,7 +133,7 @@ model:
             dropout: 0.0
 
     loss_fn_config:
-      target: sgm.modules.diffusionmodules.loss.StandardDiffusionLoss
+      target: sgm.modules.diffusionmodules.loss.NVDiffusionLoss
       params:
         loss_weighting_config:
           target: sgm.modules.diffusionmodules.loss_weighting.VWeighting
@@ -194,25 +161,22 @@ model:
             num_frames: 21
             max_scale: 2.5
 
-
 data:
-  target: sgm.data.simple.ObjaverseDataModuleFromConfig
+  target: sgm.data.simple.SV3DObjaverseDataModuleFromConfig
   params:
-    root_dir: '/root/szhao/zero123/objaverse-rendering/views_new'
-    batch_size: 1 ### maybe now we could only support batch_size=1 ?
-    num_workers: 16 ### check
-    total_view: 12
+    root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video'
+    batch_size: 1 ### maybe now we could only support batch_size=1
+    num_workers: 1 ### check
+    total_view: 21
     train:
       validation: False
       image_transforms:
-        size: 256
+        size: 576
 
     validation:
       validation: True
       image_transforms:
-        size: 256
-
-
+        size: 576
 
 lightning: # lightning_config
   modelcheckpoint:

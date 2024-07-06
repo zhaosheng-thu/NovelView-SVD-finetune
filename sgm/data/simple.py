@@ -208,23 +208,10 @@ class ObjaverseDataModuleFromConfig(pl.LightningDataModule):
                           batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 ### TODO: delete this part
-"""
-训练流程：
-
-当你调用 Trainer.fit(model) 时，Lightning 会自动调用 train_dataloader 方法来获取训练数据加载器。
-验证流程：
-
-在训练过程中，如果你指定了验证集，Lightning 会定期调用 val_dataloader 方法来获取验证数据加载器，以在训练过程中进行验证。
-你也可以通过 Trainer.validate(model) 手动触发验证过程，这时也会调用 val_dataloader。
-测试流程：
-
-当你调用 Trainer.test(model) 时，Lightning 会调用 test_dataloader 方法来获取测试数据加载器。
-"""
-
 
 class ObjaverseData(Dataset):
     def __init__(self,
-        root_dir='/root/szhao/zero123/objaverse-rendering/views_new', # TODO: modify this path
+        root_dir='', # TODO: modify this path
         image_transforms=[],
         ext="png",
         default_trans=torch.zeros(3),
@@ -352,7 +339,7 @@ class NVObjaverseData(ObjaverseData):
         super().__init__(*args, **kwargs)
         
         
-    def load_image_sv3d(self, input_img_path, image_frame_ratio=None):
+    def load_image_nv(self, input_img_path, image_frame_ratio=None):
         image = Image.open(input_img_path)
         # print("image_mode", image.mode)
         if image.mode == "RGBA":
@@ -432,15 +419,15 @@ class NVObjaverseData(ObjaverseData):
             data["path"] = str(filename)
         
         try:
-            target_im, shape = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_target))
-            cond_im, _ = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_cond))
+            target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
+            cond_im, _ = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
         except:
             # very hacky solution
             filename = os.path.join(self.root_dir, 'fe4b6c7c52344982a2a8821dc0464c45') # this one we know is valid
-            target_im, shape = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_target))
-            cond_im, _ = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_cond))
+            target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
+            cond_im, _ = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
             target_im = torch.zeros_like(target_im)
@@ -454,7 +441,7 @@ class NVObjaverseData(ObjaverseData):
         data["cond_frames"] = cond_im + cond_aug * torch.randn_like(cond_im)
         d_azimuth, d_theta, d_z = self.get_azimuth_theta_z(target_RT, cond_RT)
         
-        f = shape[0] # TODO: check f, it's just the depth of Unet 3D, and whether we need to device here?
+        f = shape[0]
         d_azimuth = torch.tensor(d_azimuth).repeat(f)
         d_theta = torch.tensor(d_theta).repeat(f)
         d_z = torch.tensor(d_z).repeat(f)
@@ -470,12 +457,189 @@ class NVObjaverseData(ObjaverseData):
         
         if self.postprocess is not None:
             data = self.postprocess(data)
-
-        # print("data in simple.py: ", data)
-        # for k, v in data.items():
-        #     print(k, v.shape) if isinstance(v, torch.Tensor) else print(k, len(v))
+            
         return data
     
+def transform_fn(x):
+    return rearrange(x * 2. - 1., 'c h w -> h w c')
+
+class SV3DObjaverseDataModuleFromConfig(pl.LightningDataModule):
+    def __init__(self, root_dir, batch_size, total_view, train=None, validation=None,
+                 test=None, num_workers=4, **kwargs):
+        super().__init__()
+        self.root_dir = root_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.total_view = total_view
+
+        if train is not None:
+            dataset_config = train
+        if validation is not None:
+            dataset_config = validation
+
+        if 'image_transforms' in dataset_config:
+            image_transforms = [torchvision.transforms.Resize(dataset_config.image_transforms.size)]
+        else:
+            image_transforms = []
+        image_transforms.extend([transforms.ToTensor(),
+                                transforms.Lambda(transform_fn)])
+        self.image_transforms = torchvision.transforms.Compose(image_transforms)
+    
+    def train_dataloader(self):
+        dataset = SV3DObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=False, \
+                                image_transforms=self.image_transforms)
+        sampler = DistributedSampler(dataset)
+        return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, sampler=sampler)
+
+    def val_dataloader(self):
+        dataset = SV3DObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=True, \
+                                image_transforms=self.image_transforms)
+        sampler = DistributedSampler(dataset)
+        return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+    
+    def test_dataloader(self):
+        return wds.WebLoader(SV3DObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
+                          batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)    
+
+# class for sv3d
+class SV3DObjaverseData(ObjaverseData):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        
+    def load_image_sv3d(self, input_img_path, image_frame_ratio=None):
+        image = Image.open(input_img_path)
+        # print("image_mode", image.mode)
+        if image.mode == "RGBA":
+            pass
+        else:
+            # remove bg
+            image.thumbnail([768, 768], Image.Resampling.LANCZOS)
+            image = remove(image.convert("RGBA"), alpha_matting=True)
+        # resize object in frame
+        image_arr = np.array(image)
+        in_w, in_h = image_arr.shape[:2]
+        ret, mask = cv2.threshold(
+            np.array(image.split()[-1]), 0, 255, cv2.THRESH_BINARY
+        )
+        x, y, w, h = cv2.boundingRect(mask)
+        max_size = max(w, h)
+        side_len = (
+            int(max_size / image_frame_ratio)
+            if image_frame_ratio is not None
+            else in_w
+        )
+        padded_image = np.zeros((side_len, side_len, 4), dtype=np.uint8)
+        center = side_len // 2
+        padded_image[
+            center - h // 2 : center - h // 2 + h,
+            center - w // 2 : center - w // 2 + w,
+        ] = image_arr[y : y + h, x : x + w]
+        # TODO: resize frame to 512*512？256*256？576*576？
+        rgba = Image.fromarray(padded_image).resize((576, 576), Image.LANCZOS)
+        # white bg
+        rgba_arr = np.array(rgba) / 255.0
+        rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])
+        input_image = Image.fromarray((rgb * 255).astype(np.uint8))
+        
+        image = ToTensor()(input_image)
+        image = image * 2.0 - 1.0
+
+        # device = "cuda" # TODO: modify this if not using GPU
+        image = image.unsqueeze(0) # first dimension is the batch size
+        H, W = image.shape[2:]
+        assert image.shape[1] == 3
+        F = 8
+        C = 4
+        f = 21
+        shape = (f, C, H // F, W // F)
+        
+        return image, shape
+    
+        
+    def get_azimuth_theta_z(self, target_RT, cond_RT):
+        R, T = target_RT[:3, :3], target_RT[:, -1]
+        T_target = -R.T @ T
+
+        R, T = cond_RT[:3, :3], cond_RT[:, -1]
+        T_cond = -R.T @ T
+
+        theta_cond, azimuth_cond, z_cond = self.cartesian_to_spherical(T_cond[None, :])
+        theta_target, azimuth_target, z_target = self.cartesian_to_spherical(T_target[None, :])
+        
+        d_theta = theta_target - theta_cond
+        d_azimuth = (azimuth_target - azimuth_cond) % (2 * math.pi)
+        d_z = z_target - z_cond
+        
+        return np.array([d_azimuth, d_theta, d_z])
+    
+    
+    def __getitem__(self, index):
+        data = {}
+        total_view = self.total_view
+        filename = os.path.join(self.root_dir, self.paths[index])
+
+        print(f"\nindex in simple.py: {index}, {self.paths[index]}")
+
+        if self.return_paths:
+            data["path"] = str(filename)
+            
+        index_cond = 0
+        
+        # preprocess the first frame as condition, reading the png
+        try:
+            cond_im, _ = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_cond))
+            cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
+        except:
+            filename = os.path.join(self.root_dir, '0a8c36767de249e89fe822f48249c10c') # this one we know is valid
+            cond_im, _ = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_cond))
+            cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
+            cond_im = torch.zeros_like(cond_im)
+            print("load except object")
+            
+        target_frame_wo_noise = [] # prepraing for the target frames without noise, all the latents encoded by vae, ended with .pt
+        azimuth = []
+        polar = []
+        height = []
+        for index_target in range(total_view):
+            try:
+                target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
+                target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
+                print("target_im in  simple.py: ", target_im.shape)
+                
+            except:
+                # very hacky solution
+                filename = os.path.join(self.root_dir, '0a8c36767de249e89fe822f48249c10c') # this one we know is valid
+                target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
+                target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
+                target_im = torch.zeros_like(target_im)
+
+            d_azimuth, d_theta, d_z = self.get_azimuth_theta_z(target_RT, cond_RT)
+            target_frame_wo_noise.append(target_im)
+            azimuth.append(torch.tensor(d_azimuth))
+            polar.append(torch.tensor(d_theta))
+            height.append(torch.tensor(d_z))
+        
+        # TODO cond_aug is setted to 1e-5; whether here set it "to device?"
+        
+        cond_aug = 1e-5
+        data["target_frames_without_noise"] = torch.cat(target_frame_wo_noise, dim=0) # TODO: check this, all of this should be tensor, and should we allocate device here?
+        data["cond_frames_without_noise"] = cond_im
+        data["cond_aug"] = torch.tensor(cond_aug).repeat(total_view)
+        data["cond_frames"] = cond_im + cond_aug * torch.randn_like(cond_im)
+        data["azimuths_rad"] = torch.cat(azimuth, dim=0) # change to dim=1
+        data["polars_rad"] = torch.cat(polar, dim=0)
+        data["height_z"] = torch.cat(height, dim=0)
+        
+        data["num_video_frames"] = total_view # this is not a tensor
+        
+        if self.postprocess is not None:
+            data = self.postprocess(data)
+            
+        for k, v in data.items():
+            print("in simple.py", k, v.shape) if isinstance(v, torch.Tensor) else print(k, v)
+        return data  
+
 
 class FolderData(Dataset):
     def __init__(self,

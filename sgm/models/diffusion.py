@@ -117,9 +117,9 @@ class DiffusionEngine(pl.LightningModule):
     def get_input(self, batch):
         # assuming unified data format, dataloader returns a dict.
         # image tensors should be scaled to -1 ... 1 and in bchw format
-        for k, v in batch.items():
-            print(k, v.shape)
-        print("input_key in get_input diffusion.py: ", self.input_key)
+        # for k, v in batch.items():
+        #     print(k, v.shape)
+        print("input_key in get_input diffusion.py: ", self.input_key, batch[self.input_key].shape)
         return batch[self.input_key]
     
 
@@ -148,7 +148,7 @@ class DiffusionEngine(pl.LightningModule):
         # x shape [bs, f, c, h, w] [bs, 1, 3, 256, 256]
         # TODO: check whether reshape x to [bs, 3, 256, 256] is necessary
         reshape_x = False
-        if len(x.shape) == 5:
+        if len(x.shape) == 5: # for NVDiffusion 
             reshape_x = True
             bs, f, c, h, w = x.shape
             x = x.view(bs * f, c, h, w)
@@ -182,10 +182,10 @@ class DiffusionEngine(pl.LightningModule):
         return loss_mean, loss_dict
 
     def shared_step(self, batch: Dict) -> Any:
-        x = self.get_input(batch) # x [bs, f, c, h, w], f = 1
+        x = self.get_input(batch) # x [bs, f, c, h, w], f = 1, NVD
         print("x(input)", x.shape)
-        x = self.encode_first_stage(x)
-        print("x(encoded)", x.shape) # x(encoded) torch.Size([8, 1, 4, 72, 72]) f = 1, bs = 8
+        # x = self.encode_first_stage(x)
+        print("x(encoded)", x.shape) # x(encoded) torch.Size([8, 1, 4, 72, 72]) f = 1, bs = 8, NVD
         batch["global_step"] = self.global_step
         loss, loss_dict = self(x, batch)
         return loss, loss_dict
@@ -322,7 +322,7 @@ class DiffusionEngine(pl.LightningModule):
     def log_images(
         self,
         batch: Dict,
-        N: int = 8,
+        N: int = 1,
         sample: bool = True,
         ucg_keys: List[str] = None,
         **kwargs,
@@ -354,6 +354,7 @@ class DiffusionEngine(pl.LightningModule):
         z = self.encode_first_stage(x)
         log["reconstructions"] = self.decode_first_stage(z)
         log.update(self.log_conditionings(batch, N))
+        print("****succeed in log_conditionings****")
 
         for k in c:
             if isinstance(c[k], torch.Tensor):

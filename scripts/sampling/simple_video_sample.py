@@ -20,13 +20,13 @@ from scripts.util.detection.nsfw_and_watermark_dectection import DeepFloydDataFi
 from sgm.inference.helpers import embed_watermark
 from sgm.util import default, instantiate_from_config
 from torchvision.transforms import ToTensor
-
+print(torch.cuda.is_available())
 
 def sample(
     input_path: str = "outputs/simple_video_sample/sv3d_u/000000.jpg",  # Can either be image file or folder with image files
     num_frames: Optional[int] = None,  # 21 for SV3D
     num_steps: Optional[int] = None,
-    version: str = "sv3d_p",
+    version: str = "sv3d_u",
     fps_id: int = 6,
     motion_bucket_id: int = 127,
     cond_aug: float = 0.02,
@@ -34,8 +34,8 @@ def sample(
     decoding_t: int = 6,  # Number of frames decoded at a time! This eats most VRAM. Reduce if necessary.
     device: str = "cuda",
     output_folder: Optional[str] = None,
-    elevations_deg: Optional[float | List[float]] = [20,15,10,10,0,0,0,5,5,0,0,0,-5,-10,-10,-10,-15,-20,-20,-20,-20],  # For SV3D
-    azimuths_deg: Optional[List[float]] = [1,20,35,50,60,75,90,110,125,140,160,180,200,210,220,240,260,280,300,320,340],  # For SV3D
+    elevations_deg: Optional[float | List[float]] = [20,15,10,10,0,0,0],  # For SV3D
+    azimuths_deg: Optional[List[float]] = [1,50,120,170,240,310,350],  # For SV3D
     image_frame_ratio: Optional[float] = None,
     verbose: Optional[bool] = False,
 ):
@@ -78,7 +78,7 @@ def sample(
         num_frames = 21
         num_steps = default(num_steps, 50)
         output_folder = default(output_folder, "outputs/simple_video_sample/sv3d_p/")
-        model_config = "/root/szhao/generative-models/scripts/sampling/configs/sv3d_p.yaml"
+        model_config = "/root/zyma/szhao-06/generative-models/scripts/sampling/configs/sv3d_p.yaml"
         cond_aug = 1e-5
         if isinstance(elevations_deg, float) or isinstance(elevations_deg, int):
             elevations_deg = [elevations_deg] * num_frames
@@ -167,7 +167,7 @@ def sample(
                 center - w // 2 : center - w // 2 + w,
             ] = image_arr[y : y + h, x : x + w]
             # resize frame to 576x576
-            rgba = Image.fromarray(padded_image).resize((576, 576), Image.LANCZOS)
+            rgba = Image.fromarray(padded_image).resize((256, 256), Image.LANCZOS)
             # white bg
             rgba_arr = np.array(rgba) / 255.0
             rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])
@@ -276,7 +276,6 @@ def sample(
                 model.en_and_decode_n_samples_a_time = decoding_t
                 samples_x = model.decode_first_stage(samples_z)
                 print("samples_x", samples_x.shape)
-                1 / 0
                 if "sv3d" in version:
                     samples_x[-1:] = value_dict["cond_frames_without_noise"]
                 samples = torch.clamp((samples_x + 1.0) / 2.0, min=0.0, max=1.0)

@@ -13,7 +13,14 @@
 /build
 /src
 /data
+/logs
 /log
 
-.data
-.github
+/.data
+/.github
+/.vscode
+/__pycache__
+
+# data
+/objaverse-rendering
+/objaverse-rendering-video

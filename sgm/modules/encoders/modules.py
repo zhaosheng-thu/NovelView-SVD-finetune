@@ -130,6 +130,7 @@ class GeneralConditioner(nn.Module):
                 if hasattr(embedder, "input_key") and (embedder.input_key is not None):
                     if embedder.legacy_ucg_val is not None:
                         batch = self.possibly_get_ucg_val(embedder, batch)
+                    print("embedder.input_key in modules.py", embedder.input_key, batch[embedder.input_key].shape)
                     emb_out = embedder(batch[embedder.input_key])
                 elif hasattr(embedder, "input_keys"):
                     emb_out = embedder(*[batch[k] for k in embedder.input_keys])

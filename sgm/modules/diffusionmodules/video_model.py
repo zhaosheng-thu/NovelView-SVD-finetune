@@ -462,7 +462,7 @@ class VideoUNet(nn.Module):
             emb = emb + self.label_emb(y)
 
         h = x
-        print("h size in video_model.py", h.shape, "emb size", emb.size, "context size", context.size) 
+        print("h size in video_model.py", h.shape, "emb size", emb.shape, "context size", context.shape) 
         # h size torch.size[bs * f, 8(c*2), 72, 72] emb size torch.size[bs * f, 1280] context size torch.size[bs * f, 1, 1024]
         for module in self.input_blocks: # ModuleList(TimestepEmbedSequential,  2 x TimestepEmbedSequential((0): VideoResBlock(...)))
             h = module(

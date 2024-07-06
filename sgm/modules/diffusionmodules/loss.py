@@ -53,22 +53,8 @@ class StandardDiffusionLoss(nn.Module):
         input: torch.Tensor,
         batch: Dict,
     ) -> torch.Tensor:
-        # 
-        from einops import rearrange, repeat
-        for k in ['cond_frames', 'cond_frames_without_noise']:
-            batch[k] = rearrange(batch[k], "b f ... -> (b f) ...") # rearange to satisfy the assert in FrozenOpenCLIPImageEmbedder
-        # for k in ['polars_rad', 'azimuths_rad', 'height_z', 'cond_aug']:
-        #     print(k, batch[k].shape)
-        #     print(batch['cond_aug'])
-        #     print(batch['polars_rad'])
-        #     assert torch.all(batch[k] == batch[k][0]) # 不一样的bs不同，怎么处理呢
-        #     batch[k] = batch[k][0]
         
-        cond = conditioner(batch)
-        print("cond_keys in loss.py", cond.keys()) # TODO: check cond_keys and val shape
-        for k, v in cond.items():
-            print("in loss.py", k, v.shape)
-            
+        cond = conditioner(batch)     
         return self._forward(network, denoiser, cond, input, batch)
 
     def _forward(
@@ -102,6 +88,7 @@ class StandardDiffusionLoss(nn.Module):
         model_output = denoiser(
             network, noised_input, sigmas, cond, **additional_model_inputs
         )
+        print("model_output shape in loss.py", model_output.shape)
         w = append_dims(self.loss_weighting(sigmas), input.ndim)
         return self.get_loss(model_output, input, w)
 
@@ -119,3 +106,19 @@ class StandardDiffusionLoss(nn.Module):
             return loss
         else:
             raise NotImplementedError(f"Unknown loss type {self.loss_type}")
+
+
+class NVDiffusionLoss(StandardDiffusionLoss):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+    def forward(self, network: nn.Module, denoiser: Denoiser, conditioner: GeneralConditioner, input: torch.Tensor, batch: Dict) -> torch.Tensor:
+        from einops import rearrange, repeat
+        for k in ['cond_frames', 'cond_frames_without_noise']:
+            batch[k] = rearrange(batch[k], "b f ... -> (b f) ...") # rearange to satisfy the assert in FrozenOpenCLIPImageEmbedder
+        
+        cond = conditioner(batch)
+        print("cond_keys in loss.py", cond.keys()) # TODO: check cond_keys and val shape
+        for k, v in cond.items():
+            print("in loss.py", k, v.shape)
+        return self._forward(network, denoiser, cond, input, batch)

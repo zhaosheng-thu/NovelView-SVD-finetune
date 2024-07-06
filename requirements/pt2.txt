@@ -1,6 +1,7 @@
 black==23.7.0
 chardet==5.1.0
 clip # @ git+https://github.com/openai/CLIP.git
+diffusers==0.25.0 # diffusers for vae encoder
 einops>=0.6.1
 fairscale>=0.4.13
 fire>=0.5.0
@@ -24,14 +25,14 @@ scipy>=1.10.1
 streamlit>=0.73.1
 tensorboardx==2.6
 timm>=0.9.2
-tokenizers==0.12.1
+tokenizers==0.15.2
 torch>=2.0.1
 torchaudio>=2.0.2
 torchdata==0.6.1
 torchmetrics>=1.0.1
 torchvision>=0.15.2
 tqdm>=4.65.0
-transformers==4.19.1
+transformers==4.38.2
 triton==2.0.0
 urllib3<1.27,>=1.25.4
 wandb>=0.15.6
@@ -41,4 +42,5 @@ xformers>=0.0.20
 gradio
 streamlit-keyup==0.2.0
 datasets[vision]==2.4.0
+# tokenizers-0.12.1 transformers-4.19.1
 # pip3 install -e git+https://github.com/Stability-AI/datapipelines.git@main#egg=sdata
