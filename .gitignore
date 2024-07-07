@@ -24,3 +24,9 @@
 # data
 /objaverse-rendering
 /objaverse-rendering-video
+/data
+
+CODEOWNERS
+LICENSE-CODE
+README-*
+pytest.ini
