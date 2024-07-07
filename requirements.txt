@@ -1,0 +1,11 @@
+wandb
+tqdm
+objaverse
+tyro==0.3.38
+boto3
+huggingface_hub
+opencv-python==4.8.1.78
+Pillow
+rembg
+torch==1.12.1
+torchvision==0.13.1
