@@ -187,9 +187,11 @@ class ObjaverseDataModuleFromConfig(pl.LightningDataModule):
         else:
             image_transforms = []
         image_transforms.extend([transforms.ToTensor(),
-                                transforms.Lambda(lambda x: rearrange(x * 2. - 1., 'c h w -> h w c'))])
+                                transforms.Lambda(transform_fn)])
         self.image_transforms = torchvision.transforms.Compose(image_transforms)
 
+    def transform_fn(x):
+        return rearrange(x * 2. - 1., 'c h w -> h w c')
 
     def train_dataloader(self):
         dataset = NVObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=False, \
@@ -207,7 +209,6 @@ class ObjaverseDataModuleFromConfig(pl.LightningDataModule):
         return wds.WebLoader(NVObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
                           batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
-### TODO: delete this part
 
 class ObjaverseData(Dataset):
     def __init__(self,
@@ -312,7 +313,7 @@ class ObjaverseData(Dataset):
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
         except:
             # very hacky solution, sorry about this
-            filename = os.path.join(self.root_dir, 'fe4b6c7c52344982a2a8821dc0464c45') # this one we know is valid
+            filename = os.path.join(self.root_dir, '0a8c36767de249e89fe822f48249c10c') # this one we know is valid
             target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
             cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
@@ -378,7 +379,6 @@ class NVObjaverseData(ObjaverseData):
         image = ToTensor()(input_image)
         image = image * 2.0 - 1.0
 
-        # device = "cuda" # TODO: modify this if not using GPU
         image = image.unsqueeze(0)
         H, W = image.shape[2:]
         assert image.shape[1] == 3
@@ -401,7 +401,7 @@ class NVObjaverseData(ObjaverseData):
         theta_target, azimuth_target, z_target = self.cartesian_to_spherical(T_target[None, :])
         
         d_theta = theta_target - theta_cond
-        d_azimuth = (azimuth_target - azimuth_cond) % (2 * math.pi)
+        d_azimuth = np.mod(azimuth_target - azimuth_cond, 2 * math.pi)
         d_z = z_target - z_cond
         
         return np.array([d_azimuth, d_theta, d_z])
@@ -420,31 +420,33 @@ class NVObjaverseData(ObjaverseData):
         
         try:
             target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
-            cond_im, _ = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
+            # target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
+            cond_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
         except:
             # very hacky solution
-            filename = os.path.join(self.root_dir, 'fe4b6c7c52344982a2a8821dc0464c45') # this one we know is valid
+            filename = os.path.join(self.root_dir, '0a8c36767de249e89fe822f48249c10c') # this one we know is valid
             target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
-            cond_im, _ = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
+            # target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
+            cond_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
             target_im = torch.zeros_like(target_im)
             cond_im = torch.zeros_like(cond_im)
 
-        # TODO cond_aug is setted to 1e-5; whether here set it "to device?"
         cond_aug = 1e-5
-        data["target_frames_without_noise"] = target_im # TODO: check this, all of this should be tensor, and should we allocate device here?
+        data["target_frames_without_noise"] = target_im
         data["cond_frames_without_noise"] = cond_im
         data["cond_aug"] = torch.tensor(cond_aug)
         data["cond_frames"] = cond_im + cond_aug * torch.randn_like(cond_im)
         d_azimuth, d_theta, d_z = self.get_azimuth_theta_z(target_RT, cond_RT)
         
         f = shape[0]
-        d_azimuth = torch.tensor(d_azimuth).repeat(f)
-        d_theta = torch.tensor(d_theta).repeat(f)
-        d_z = torch.tensor(d_z).repeat(f)
+        d_azimuth = torch.tensor(d_azimuth[0]).repeat(f)
+        d_theta = torch.tensor(np.deg2rad(90 - math.degrees(-d_theta[0]))).repeat(f) # pay atten to the '-' sign here
+        d_z = torch.tensor(d_z[0]).repeat(f)
+        # print("d_azimuth in simple.py: ", d_azimuth.shape, d_z.shape, d_theta.shape)
         data['cond_aug'] = data['cond_aug'].repeat(f)
         """
         because for the conditions of the azimuths, polars and heights, they are the same, and for each depth of Unet 3D
@@ -545,7 +547,6 @@ class SV3DObjaverseData(ObjaverseData):
         image = ToTensor()(input_image)
         image = image * 2.0 - 1.0
 
-        # device = "cuda" # TODO: modify this if not using GPU
         image = image.unsqueeze(0) # first dimension is the batch size
         H, W = image.shape[2:]
         assert image.shape[1] == 3
@@ -568,7 +569,7 @@ class SV3DObjaverseData(ObjaverseData):
         theta_target, azimuth_target, z_target = self.cartesian_to_spherical(T_target[None, :])
         
         d_theta = theta_target - theta_cond
-        d_azimuth = (azimuth_target - azimuth_cond) % (2 * math.pi)
+        d_azimuth = np.mod(azimuth_target - azimuth_cond, 2 * math.pi)
         d_z = z_target - z_cond
         
         return np.array([d_azimuth, d_theta, d_z])
@@ -605,7 +606,7 @@ class SV3DObjaverseData(ObjaverseData):
             try:
                 target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
                 target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
-                print("target_im in  simple.py: ", target_im.shape)
+                print("target_im in simple.py: ", target_im.shape)
                 
             except:
                 # very hacky solution
@@ -615,21 +616,29 @@ class SV3DObjaverseData(ObjaverseData):
                 target_im = torch.zeros_like(target_im)
 
             d_azimuth, d_theta, d_z = self.get_azimuth_theta_z(target_RT, cond_RT)
+            
+            # trans to deg 
             target_frame_wo_noise.append(target_im)
-            azimuth.append(torch.tensor(d_azimuth))
-            polar.append(torch.tensor(d_theta))
-            height.append(torch.tensor(d_z))
+            azimuth.append(math.degrees(d_azimuth[0]))
+            polar.append(math.degrees(-d_theta[0]))
+            height.append(d_z[0])
         
-        # TODO cond_aug is setted to 1e-5; whether here set it "to device?"
+        # azimuth = [x + random.uniform(-5, 5) for x in azimuth]
+        # azimuth = azimuth[1:] + azimuth[:1] # Here change the azimuth degree to 360, which is the same as the last frame 
+        # process the azimuth, polar and height
+        polars_rad = [np.deg2rad(90 - e) for e in polar]
+        azimuths_rad = [np.deg2rad((a - azimuth[0]) % 360) for a in azimuth]
+        azimuths_rad[0:].sort()
         
         cond_aug = 1e-5
-        data["target_frames_without_noise"] = torch.cat(target_frame_wo_noise, dim=0) # TODO: check this, all of this should be tensor, and should we allocate device here?
+        data["target_frames_without_noise"] = torch.cat(target_frame_wo_noise, dim=0)
         data["cond_frames_without_noise"] = cond_im
         data["cond_aug"] = torch.tensor(cond_aug).repeat(total_view)
         data["cond_frames"] = cond_im + cond_aug * torch.randn_like(cond_im)
-        data["azimuths_rad"] = torch.cat(azimuth, dim=0) # change to dim=1
-        data["polars_rad"] = torch.cat(polar, dim=0)
-        data["height_z"] = torch.cat(height, dim=0)
+        data["azimuths_rad"] = torch.tensor(azimuths_rad)
+        data["polars_rad"] = torch.tensor(polars_rad)
+        data["height_z"] = torch.tensor(height)
+        print("data['azi'] in simple.py: ", data["azimuths_rad"].shape)
         
         data["num_video_frames"] = total_view # this is not a tensor
         

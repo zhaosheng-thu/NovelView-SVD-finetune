@@ -43,9 +43,9 @@ class NVWrapper(IdentityWrapper):
     def forward(
         self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs
     ) -> torch.Tensor:
-        # print("x.shape in OpenaiWrapper wrappers.py", x.shape)
+        print("x.shape in NVWrapper wrappers.py", x.shape)
         print("c_noise(timestep) in wrappers.py", t.shape) # TODO: should we add noise to 2D latent or 3D latent? Now we choose 2D latent
-        print("x.shape in wrappers.py", c.get("concat", None).shape, c.get("crossattn", None).shape), c.get("vector", None).shape
+        print("c.shape in wrappers.py", c.get("concat", None).shape, c.get("crossattn", None).shape, c.get("vector", None).shape)
         # x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=1) remove this concat, and we concat that
         return self.diffusion_model(
             x,

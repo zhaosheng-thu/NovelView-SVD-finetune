@@ -34,8 +34,8 @@ def sample(
     decoding_t: int = 6,  # Number of frames decoded at a time! This eats most VRAM. Reduce if necessary.
     device: str = "cuda",
     output_folder: Optional[str] = None,
-    elevations_deg: Optional[float | List[float]] = [20,15,10,10,0,0,0],  # For SV3D
-    azimuths_deg: Optional[List[float]] = [1,50,120,170,240,310,350],  # For SV3D
+    elevations_deg: Optional[float | List[float]] = None,  # For SV3D
+    azimuths_deg: Optional[List[float]] = None,  # For SV3D
     image_frame_ratio: Optional[float] = None,
     verbose: Optional[bool] = False,
 ):
@@ -78,21 +78,23 @@ def sample(
         num_frames = 21
         num_steps = default(num_steps, 50)
         output_folder = default(output_folder, "outputs/simple_video_sample/sv3d_p/")
-        model_config = "/root/zyma/szhao-06/generative-models/scripts/sampling/configs/sv3d_p.yaml"
+        model_config = "scripts/sampling/configs/sv3d_p.yaml"
         cond_aug = 1e-5
         if isinstance(elevations_deg, float) or isinstance(elevations_deg, int):
+            import random
             elevations_deg = [elevations_deg] * num_frames
+            elevations_deg = [e + random.uniform(-5, 5) for e in elevations_deg]
         assert (
             len(elevations_deg) == num_frames
         ), f"Please provide 1 value, or a list of {num_frames} values for elevations_deg! Given {len(elevations_deg)}"
         polars_rad = [np.deg2rad(90 - e) for e in elevations_deg]
         if azimuths_deg is None:
-            azimuths_deg = np.linspace(0, 360, num_frames + 1)[1:] % 360
+            azimuths_deg = np.linspace(0, 360, num_frames + 1)[:-1] % 360
         assert (
             len(azimuths_deg) == num_frames
         ), f"Please provide a list of {num_frames} values for azimuths_deg! Given {len(azimuths_deg)}"
-        azimuths_rad = [np.deg2rad((a - azimuths_deg[-1]) % 360) for a in azimuths_deg]
-        azimuths_rad[:-1].sort()
+        azimuths_rad = [np.deg2rad((a - azimuths_deg[0]) % 360) for a in azimuths_deg]
+        azimuths_rad[0:].sort()
     else:
         raise ValueError(f"Version {version} does not exist.")
 
@@ -166,8 +168,8 @@ def sample(
                 center - h // 2 : center - h // 2 + h,
                 center - w // 2 : center - w // 2 + w,
             ] = image_arr[y : y + h, x : x + w]
-            # resize frame to 576x576
-            rgba = Image.fromarray(padded_image).resize((256, 256), Image.LANCZOS)
+            # resize frame to 576x576 TODO: 256 or 576
+            rgba = Image.fromarray(padded_image).resize((576, 576), Image.LANCZOS)
             # white bg
             rgba_arr = np.array(rgba) / 255.0
             rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])

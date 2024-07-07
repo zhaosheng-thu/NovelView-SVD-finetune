@@ -99,13 +99,6 @@ model:
           params:
             outdim: 512
 
-        # Train this embedderND
-        # - input_key: height_z
-        #   is_trainable: True # TODO: check if this needs set to trainable
-        #   target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
-        #   params:
-        #     outdim: 320
-
     first_stage_config:
       target: sgm.models.autoencoder.AutoencodingEngine
       params:
@@ -113,8 +106,6 @@ model:
           target: torch.nn.Identity
         regularizer_config:
           target: torch.nn.Identity # Debugging
-        # mutiply the encoder_config because we need to encode the first stage, choose this one if we have merged the safetensor 
-        # or this one, if we have already prepared all the latents by vae
         encoder_config:
           target: torch.nn.Identity
         decoder_config:

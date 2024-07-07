@@ -184,7 +184,7 @@ class DiffusionEngine(pl.LightningModule):
     def shared_step(self, batch: Dict) -> Any:
         x = self.get_input(batch) # x [bs, f, c, h, w], f = 1, NVD
         print("x(input)", x.shape)
-        # x = self.encode_first_stage(x)
+        # x = self.encode_first_stage(x) # TODO: Check here if we need vae encode_first_stage.
         print("x(encoded)", x.shape) # x(encoded) torch.Size([8, 1, 4, 72, 72]) f = 1, bs = 8, NVD
         batch["global_step"] = self.global_step
         loss, loss_dict = self(x, batch)

@@ -14,13 +14,11 @@ model:
         scaling_config:
           target: sgm.modules.diffusionmodules.denoiser_scaling.VScalingWithEDMcNoise
 
-    network_wrapper: "sgm.modules.diffusionmodules.wrappers.NVWrapper"
+    network_wrapper: sgm.modules.diffusionmodules.wrappers.OpenAIWrapper
 
     network_config:
-      target: sgm.modules.diffusionmodules.video_model.NovelViewUNet # use NovelViewUnet
+      target: sgm.modules.diffusionmodules.video_model.VideoUNet # use NovelViewUnet
       params:
-        latent_size: 32
-        depth: 21
         adm_in_channels: 1280 # here adm_in_channels should equals to sum of vector shape[-1](cond_aug, polars_rad, azimuths_rad, height_z)
         num_classes: sequential
         use_checkpoint: True
@@ -84,29 +82,29 @@ model:
                   target: torch.nn.Identity
 
         - input_key: cond_aug
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
-            outdim: 256 # changed
+            outdim: 320 # changed
 
         - input_key: polars_rad
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
-            outdim: 512
+            outdim: 320
 
         - input_key: azimuths_rad
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
-            outdim: 512
+            outdim: 320
 
         # Train this embedderND
-        # - input_key: height_z
-        #   is_trainable: True # TODO: check if this needs set to trainable
-        #   target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
-        #   params:
-        #     outdim: 320
+        - input_key: height_z
+          is_trainable: True
+          target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
+          params:
+            outdim: 320
 
     first_stage_config:
       target: sgm.models.autoencoder.AutoencodingEngine
@@ -114,22 +112,11 @@ model:
         loss_config:
           target: torch.nn.Identity
         regularizer_config:
-          target: sgm.modules.autoencoding.regularizers.DiagonalGaussianRegularizer # Debugging
-        # mutiply the encoder_config because we need to encode the first stage, choose this one if we have merged the safetensor
+          target: torch.nn.Identity # Debugging
+        # mutiply the encoder_config because we need to encode the first stage, choose this one if we have merged the safetensor 
+        # or this one, if we have already prepared all the latents by vae
         encoder_config:
-          target: sgm.modules.diffusionmodules.model.Encoder
-          params:
-            attn_type: vanilla-xformers
-            double_z: True
-            z_channels: 4
-            resolution: 256
-            in_channels: 3
-            out_ch: 3
-            ch: 128
-            ch_mult: [ 1, 2, 4, 4 ]
-            num_res_blocks: 2
-            attn_resolutions: [ ]
-            dropout: 0.0
+          target: torch.nn.Identity
         decoder_config:
           target: sgm.modules.diffusionmodules.model.Decoder
           params:
@@ -175,21 +162,21 @@ model:
             max_scale: 2.5
 
 data:
-  target: sgm.data.simple.ObjaverseDataModuleFromConfig
+  target: sgm.data.simple.SV3DObjaverseDataModuleFromConfig
   params:
     root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video'
     batch_size: 1 ### maybe now we could only support batch_size=1
-    num_workers: 0 ### check
+    num_workers: 1 ### check
     total_view: 21
     train:
       validation: False
       image_transforms:
-        size: 256
+        size: 576
 
     validation:
       validation: True
       image_transforms:
-        size: 256
+        size: 576
 
 lightning: # lightning_config
   modelcheckpoint:
@@ -204,5 +191,3 @@ lightning: # lightning_config
     accumulate_grad_batches: 1
     max_epochs: 5
     precision: '16-mixed'
-
-# num_frame and depth

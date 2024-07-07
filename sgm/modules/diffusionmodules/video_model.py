@@ -458,7 +458,7 @@ class VideoUNet(nn.Module):
         print("t_embed.size in video_model.py", emb.shape) # bs * f, 1280
         # emb torch.size[bs * f, 1280] if with bs * 2 * f,1280
         if self.num_classes is not None:
-            assert y.shape[0] == x.shape[0]
+            assert y.shape[0] == x.shape[0], f"{y.shape[0]},{x.shape[0]} isn't match"
             emb = emb + self.label_emb(y)
 
         h = x
@@ -512,7 +512,7 @@ class LinearProjectionAdapter(nn.Module): # The projection adapter in NovelViewS
     def forward(self, x):
         # x: (batch_size, f1(input_depth), C, H, W)
         batch_size, f, C, H, W = x.size()
-        assert H == self.height and W == self.width and f == self.input_depth, "Input height and width must match the initialized dimensions."
+        assert H == self.height and W == self.width and f == self.input_depth, f"Input height{H} and width{W}, {f} must match the initialized dimensions{self.width}, {self.input_depth}."
 
         x = x.view(batch_size, C, -1) # (batch_size, f, C, H, W) -> (batch_size, C, f1*H*W)
 

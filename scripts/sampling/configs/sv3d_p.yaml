@@ -3,7 +3,7 @@ model:
   params:
     scale_factor: 0.18215
     disable_first_stage_autocast: True
-    ckpt_path: checkpoints/sv3d_p.safetensors
+    ckpt_path: /root/zyma/szhao-06/generative-models/logs/2024-07-06T09-10-16_NV-SV3D/checkpoints/last.ckpt # generation path
 
     denoiser_config:
       target: sgm.modules.diffusionmodules.denoiser.Denoiser

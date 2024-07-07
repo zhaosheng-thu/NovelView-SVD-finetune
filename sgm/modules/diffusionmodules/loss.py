@@ -82,7 +82,7 @@ class StandardDiffusionLoss(nn.Module):
                 input.ndim,
             )
         sigmas_bc = append_dims(sigmas, input.ndim)
-        noised_input = self.get_noised_input(sigmas_bc, noise, input) # bs, 1, 4, 72, 72
+        noised_input = self.get_noised_input(sigmas_bc, noise, input) # bs, 1, 4, latent_size, latent_size
         print("noised_input shape in loss.py", noised_input.shape)
 
         model_output = denoiser(
