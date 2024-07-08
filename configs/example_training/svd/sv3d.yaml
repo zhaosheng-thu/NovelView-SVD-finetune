@@ -1,5 +1,5 @@
 model:
-  base_learning_rate: 2.0e-5 #
+  base_learning_rate: 5.0e-5 #
   target: sgm.models.diffusion.DiffusionEngine
   params:
     scale_factor: 0.18215
@@ -155,19 +155,19 @@ model:
 data:
   target: sgm.data.simple.SV3DObjaverseDataModuleFromConfig
   params:
-    root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video'
-    batch_size: 1 ### maybe now we could only support batch_size=1
+    root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video-256'
+    batch_size: 2 ### maybe now we could only support batch_size=1
     num_workers: 1 ### check
     total_view: 21
     train:
       validation: False
       image_transforms:
-        size: 576
+        size: 256
 
     validation:
       validation: True
       image_transforms:
-        size: 576
+        size: 256
 
 lightning: # lightning_config
   modelcheckpoint:
@@ -176,7 +176,7 @@ lightning: # lightning_config
       every_n_train_steps: 500
       
   trainer: # trainer_config
-    devices: 0,1
+    devices: 0,1,2,3
     benchmark: True
     num_sanity_val_steps: 0
     accumulate_grad_batches: 1

@@ -182,6 +182,7 @@ class ObjaverseDataModuleFromConfig(pl.LightningDataModule):
         if validation is not None:
             dataset_config = validation
 
+        self.size = dataset_config.image_transforms.size
         if 'image_transforms' in dataset_config:
             image_transforms = [torchvision.transforms.Resize(dataset_config.image_transforms.size)]
         else:
@@ -194,19 +195,19 @@ class ObjaverseDataModuleFromConfig(pl.LightningDataModule):
         return rearrange(x * 2. - 1., 'c h w -> h w c')
 
     def train_dataloader(self):
-        dataset = NVObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=False, \
+        dataset = NVObjaverseData(size=self.size, root_dir=self.root_dir, total_view=self.total_view, validation=False, \
                                 image_transforms=self.image_transforms)
         sampler = DistributedSampler(dataset)
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, sampler=sampler)
 
     def val_dataloader(self):
-        dataset = NVObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=True, \
+        dataset = NVObjaverseData(size=self.size, root_dir=self.root_dir, total_view=self.total_view, validation=True, \
                                 image_transforms=self.image_transforms)
         sampler = DistributedSampler(dataset)
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
     
     def test_dataloader(self):
-        return wds.WebLoader(NVObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
+        return wds.WebLoader(NVObjaverseData(size=self.size, root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
                           batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
@@ -336,9 +337,9 @@ class ObjaverseData(Dataset):
 
 
 class NVObjaverseData(ObjaverseData):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, size, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+        self.size = size
         
     def load_image_nv(self, input_img_path, image_frame_ratio=None):
         image = Image.open(input_img_path)
@@ -368,9 +369,8 @@ class NVObjaverseData(ObjaverseData):
             center - h // 2 : center - h // 2 + h,
             center - w // 2 : center - w // 2 + w,
         ] = image_arr[y : y + h, x : x + w]
-        # resize frame to 512*512？256*256？576*576？
         # TODO: the size should be aligned with the size in the dataset and the config file
-        rgba = Image.fromarray(padded_image).resize((256, 256), Image.LANCZOS)
+        rgba = Image.fromarray(padded_image).resize((self.size, self.size), Image.LANCZOS)
         # white bg
         rgba_arr = np.array(rgba) / 255.0
         rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])
@@ -419,16 +419,16 @@ class NVObjaverseData(ObjaverseData):
             data["path"] = str(filename)
         
         try:
-            target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
-            # target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
+            # target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
+            target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
             cond_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
         except:
             # very hacky solution
             filename = os.path.join(self.root_dir, '0a8c36767de249e89fe822f48249c10c') # this one we know is valid
-            target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
-            # target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
+            # target_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_target))
+            target_im = torch.load(os.path.join(filename, '%03d.pt' % index_target))
             cond_im, shape = self.load_image_nv(os.path.join(filename, '%03d.png' % index_cond))
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
@@ -478,7 +478,8 @@ class SV3DObjaverseDataModuleFromConfig(pl.LightningDataModule):
             dataset_config = train
         if validation is not None:
             dataset_config = validation
-
+            
+        self.size = dataset_config.image_transforms.size
         if 'image_transforms' in dataset_config:
             image_transforms = [torchvision.transforms.Resize(dataset_config.image_transforms.size)]
         else:
@@ -488,26 +489,26 @@ class SV3DObjaverseDataModuleFromConfig(pl.LightningDataModule):
         self.image_transforms = torchvision.transforms.Compose(image_transforms)
     
     def train_dataloader(self):
-        dataset = SV3DObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=False, \
+        dataset = SV3DObjaverseData(size=self.size, root_dir=self.root_dir, total_view=self.total_view, validation=False, \
                                 image_transforms=self.image_transforms)
         sampler = DistributedSampler(dataset)
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, sampler=sampler)
 
     def val_dataloader(self):
-        dataset = SV3DObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=True, \
+        dataset = SV3DObjaverseData(size=self.size, root_dir=self.root_dir, total_view=self.total_view, validation=True, \
                                 image_transforms=self.image_transforms)
         sampler = DistributedSampler(dataset)
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
     
     def test_dataloader(self):
-        return wds.WebLoader(SV3DObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
+        return wds.WebLoader(SV3DObjaverseData(size=self.size, root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
                           batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)    
 
 # class for sv3d
 class SV3DObjaverseData(ObjaverseData):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, size, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+        self.size = size
         
     def load_image_sv3d(self, input_img_path, image_frame_ratio=None):
         image = Image.open(input_img_path)
@@ -537,8 +538,7 @@ class SV3DObjaverseData(ObjaverseData):
             center - h // 2 : center - h // 2 + h,
             center - w // 2 : center - w // 2 + w,
         ] = image_arr[y : y + h, x : x + w]
-        # TODO: resize frame to 512*512？256*256？576*576？
-        rgba = Image.fromarray(padded_image).resize((576, 576), Image.LANCZOS)
+        rgba = Image.fromarray(padded_image).resize((self.size, self.size), Image.LANCZOS)
         # white bg
         rgba_arr = np.array(rgba) / 255.0
         rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])

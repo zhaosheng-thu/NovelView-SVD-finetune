@@ -114,22 +114,23 @@ model:
         loss_config:
           target: torch.nn.Identity
         regularizer_config:
-          target: sgm.modules.autoencoding.regularizers.DiagonalGaussianRegularizer # Debugging
-        # mutiply the encoder_config because we need to encode the first stage, choose this one if we have merged the safetensor
+          target: torch.nn.Identity # sgm.modules.autoencoding.regularizers.DiagonalGaussianRegularizer
         encoder_config:
-          target: sgm.modules.diffusionmodules.model.Encoder
-          params:
-            attn_type: vanilla-xformers
-            double_z: True
-            z_channels: 4
-            resolution: 256
-            in_channels: 3
-            out_ch: 3
-            ch: 128
-            ch_mult: [ 1, 2, 4, 4 ]
-            num_res_blocks: 2
-            attn_resolutions: [ ]
-            dropout: 0.0
+          target: torch.nn.Identity
+        # encoder_config:
+        #   target: sgm.modules.diffusionmodules.model.Encoder
+        #   params:
+        #     attn_type: vanilla-xformers
+        #     double_z: True
+        #     z_channels: 4
+        #     resolution: 256
+        #     in_channels: 3
+        #     out_ch: 3
+        #     ch: 128
+        #     ch_mult: [ 1, 2, 4, 4 ]
+        #     num_res_blocks: 2
+        #     attn_resolutions: [ ]
+        #     dropout: 0.0
         decoder_config:
           target: sgm.modules.diffusionmodules.model.Decoder
           params:
@@ -177,7 +178,7 @@ model:
 data:
   target: sgm.data.simple.ObjaverseDataModuleFromConfig
   params:
-    root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video'
+    root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video-256'
     batch_size: 1 ### maybe now we could only support batch_size=1
     num_workers: 0 ### check
     total_view: 21
@@ -198,7 +199,7 @@ lightning: # lightning_config
       every_n_train_steps: 500
       
   trainer: # trainer_config
-    devices: 0,1
+    devices: 0,1,2,3
     benchmark: True
     num_sanity_val_steps: 0
     accumulate_grad_batches: 1

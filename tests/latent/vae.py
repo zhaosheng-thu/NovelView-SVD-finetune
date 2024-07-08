@@ -11,7 +11,30 @@ import numpy as np
 from PIL import Image
 import os
 import json
+import argparse
+import sys
+
         
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--filename",
+    type=str,
+    required=True,
+    help="filename",
+)
+parser.add_argument(
+    "--idx",
+    type=int,
+    required=True,
+    help="idx",
+)
+parser.add_argument(
+    "--size",
+    type=int,
+    required=True,
+    help="size, 256, 512, 576",
+)
+
 def image_loader(image_name):
     image = Image.open(image_name)
     image = transforms.ToTensor()(image).unsqueeze(0) # 给张量增添一个第零维度
@@ -76,23 +99,18 @@ def latent_image2pil_image(latent_image):
     pil_image = Image.fromarray(latent_image[0])
     return pil_image
      
-     
-vae = AutoencoderKLTemporalDecoder.from_pretrained("/root/zyma/szhao-06/model-weights/svd/vae").to("cuda")
-path = "/root/zyma/szhao-06/generative-models/objaverse-rendering-video-256/valid_paths.json"
-with open(path, 'r') as f:
-    paths = json.load(f)
-    
-# list 
-for item in paths:
-    index_item = item.split("/")[-1][:-4]
-    filename = os.path.join(path.split("/valid_paths")[0], index_item)
-    print("index", index_item, filename)
-    for idx in range(21):  
-        image, _ = load_image_sv3d(os.path.join(filename, '%03d.png' % idx))
-        image = image.to("cuda")
-        latent_dist = vae.encode(image).latent_dist
-        latents_sp = 0.18215 * latent_dist.sample() #s ample mean + std.randn
-        latents = 0.18215 * latent_dist.mode() # mean
-        torch.save(latents_sp, os.path.join(filename, '%03d.pt' % idx))
-        
-# image = image_loader(IMG_PATH) if IMG_PATH is not None else torch.rand(1, 3, 512, 512) * 2 - 1 
+argv = sys.argv[sys.argv.index("--") + 1 :]
+args = parser.parse_args(argv)
+
+vae = AutoencoderKLTemporalDecoder.from_pretrained("/root/szhao/model-weights/stable-video-diffusion-img2vid-xt/vae").to("cuda")
+
+filename= args.filename
+idx = args.idx
+image_path = os.path.join(filename, '%03d.png' % idx)
+image, _ = load_image_sv3d(image_path)
+image = image.to("cuda")
+latent_dist = vae.encode(image).latent_dist
+latents_sp = 0.18215 * latent_dist.sample()
+latents = 0.18215 * latent_dist.mode()
+torch.save(latents_sp, os.path.join(filename, '%03d.pt' % idx))
+print("save latent to", os.path.join(filename, '%03d.pt' % idx))

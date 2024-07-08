@@ -169,7 +169,7 @@ def sample(
                 center - w // 2 : center - w // 2 + w,
             ] = image_arr[y : y + h, x : x + w]
             # resize frame to 576x576 TODO: 256 or 576
-            rgba = Image.fromarray(padded_image).resize((576, 576), Image.LANCZOS)
+            rgba = Image.fromarray(padded_image).resize((256, 256), Image.LANCZOS)
             # white bg
             rgba_arr = np.array(rgba) / 255.0
             rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])

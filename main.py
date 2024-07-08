@@ -276,8 +276,8 @@ class SetupCallback(Callback):
                         os.path.join(self.ckptdir, "trainstep_checkpoints"),
                         exist_ok=True,
                     )
-            print("Project config")
-            print(OmegaConf.to_yaml(self.config))
+            # print("Project config")
+            # print(OmegaConf.to_yaml(self.config))
             if MULTINODE_HACKS:
                 import time
 
@@ -832,7 +832,7 @@ if __name__ == "__main__":
         print("up to prepare for data")
         # data
         data = instantiate_from_config(config.data)
-        print("data", data)
+        # print("data", data)
         # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
         # calling these ourselves should not be necessary but it is.
         # lightning still takes care of proper multiprocessing though
@@ -886,7 +886,7 @@ if __name__ == "__main__":
                     ckpt_path = os.path.join(ckptdir, "last.ckpt")
                 else:
                     ckpt_path = os.path.join(ckptdir, melk_ckpt_name)
-                trainer.save_checkpoint(ckpt_path) # TODO: remove this of we meet the exception
+                trainer.save_checkpoint(ckpt_path)
 
         def divein(*args, **kwargs):
             if trainer.global_rank == 0:

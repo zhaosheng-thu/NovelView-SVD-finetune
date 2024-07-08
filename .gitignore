@@ -23,8 +23,9 @@
 
 # data
 /objaverse-rendering
-/objaverse-rendering-video
+/objaverse-rendering-*
 /data
+/model_licenses
 
 CODEOWNERS
 LICENSE-CODE
