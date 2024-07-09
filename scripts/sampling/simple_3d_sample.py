@@ -30,6 +30,7 @@ def sample(
     fps_id: int = 6,
     motion_bucket_id: int = 127,
     cond_aug: float = 0.02,
+    image_resolution = 576, # 256 for NV3D
     seed: int = 23,
     decoding_t: int = 6,  # Number of frames decoded at a time! This eats most VRAM. Reduce if necessary.
     device: str = "cuda",
@@ -117,6 +118,22 @@ def sample(
         azimuths_rad = [np.deg2rad((a - azimuths_deg[0]) % 360) for a in azimuths_deg]
         azimuths_rad[0:].sort()
         height_z = [random.uniform(-0.00000002, 0.00000002) for _ in range(num_frames)]
+    elif version == 'nv3d_p':
+        num_frames = 21
+        num_steps = default(num_steps, 50)
+        output_folder = default(output_folder, "outputs/simple_3d_sample/nv3d_p/")
+        model_config = "scripts/sampling/configs/nv3d_p.yaml"
+        cond_aug = 1e-5
+        if isinstance(elevations_deg, float) or isinstance(elevations_deg, int):
+            import random
+            elevations_deg = [elevations_deg] * num_frames
+        assert (
+            len(elevations_deg) == num_frames
+        ), f"Please provide 1 value, or a list of {num_frames} values for elevations_deg! Given {len(elevations_deg)}"
+        polars_rad = [np.deg2rad(90 - e) for e in elevations_deg]
+        if azimuths_deg is None:
+            azimuths_rad = [np.pi / num_frames + np.random.uniform(-0.1, 0.1)] * num_frames
+        print("azimuths_rad", polars_rad, "elevation_deg", elevations_deg)
     else:
         raise ValueError(f"Version {version} does not exist.")
 
@@ -127,17 +144,6 @@ def sample(
         num_steps,
         verbose,
     )
-    
-    state_dict_keys = []
-    state_dict_vals = []
-
-    # print("model", model.first_stage_model)
-    # for k in model.state_dict().keys():
-    #     if "diffusion_model.out." in k:
-    #         state_dict_keys.append(k)
-    #         state_dict_vals.append(model.state_dict()[k])
-    #         print("k", k, model.state_dict()[k].shape)
-    # print("/nYes")if isinstance(model.first_stage_model.decoder, VideoDecoder) else print("No")
 
     torch.manual_seed(seed)
 
@@ -162,7 +168,7 @@ def sample(
         raise ValueError
 
     for input_img_path in all_img_paths:
-        if "sv3d" in version:
+        if "sv3d" or "nv3d" in version:
             image = Image.open(input_img_path)
             if image.mode == "RGBA":
                 pass
@@ -191,7 +197,7 @@ def sample(
                 center - w // 2 : center - w // 2 + w,
             ] = image_arr[y : y + h, x : x + w]
             # resize frame to 576x576 TODO: 256 or 576
-            rgba = Image.fromarray(padded_image).resize((576, 576), Image.LANCZOS)
+            rgba = Image.fromarray(padded_image).resize((image_resolution, image_resolution), Image.LANCZOS)
             # white bg
             rgba_arr = np.array(rgba) / 255.0
             rgb = rgba_arr[..., :3] * rgba_arr[..., -1:] + (1 - rgba_arr[..., -1:])
@@ -218,7 +224,7 @@ def sample(
         assert image.shape[1] == 3
         F = 8
         C = 4
-        shape = (num_frames, C, H // F, W // F)
+        shape = (num_frames, C, H // F, W // F) if "nv3d" not in version else (1, 1, C, H // F, W // F)
         if (H, W) != (576, 1024) and "sv3d" not in version:
             print(
                 "WARNING: The conditioning frame you provided is not 576x1024. This leads to suboptimal performance as model was only trained on 576x1024. Consider increasing `cond_aug`."
@@ -244,7 +250,7 @@ def sample(
         value_dict["fps_id"] = fps_id
         value_dict["cond_aug"] = cond_aug
         value_dict["cond_frames"] = image + cond_aug * torch.randn_like(image)
-        if "sv3d_p" in version:
+        if "sv3d_p" or "nv3d_p" in version:
             value_dict["polars_rad"] = polars_rad
             value_dict["azimuths_rad"] = azimuths_rad
         elif "sv3d_c" in version:
@@ -293,7 +299,7 @@ def sample(
 
                 def denoiser(input, sigma, c):
                     print("input", input.shape)
-                    print("sigma", sigma.shape)
+                    print("sigma", sigma.shape, sigma)
                     # print("c", c.shape)
                     return model.denoiser(
                         model.model, input, sigma, c, **additional_model_inputs
@@ -301,9 +307,15 @@ def sample(
 
                 samples_z = model.sampler(denoiser, randn, cond=c, uc=uc)
                 print("samples_z", samples_z.shape)
+                if "nv3d" in version:
+                    samples_z = repeat(samples_z, "b ... -> b t ...", t=1)
+                    samples_z = rearrange(samples_z, "b t f ... -> (b t f) ...")
                 model.en_and_decode_n_samples_a_time = decoding_t
                 samples_x = model.decode_first_stage(samples_z)
                 print("samples_x", samples_x.shape)
+                print("image", image.shape)
+                loss = torch.mean(((samples_x - image) ** 2).reshape(image.shape[0], -1), 1)
+                print("loss", loss)
                 if "sv3d" in version:
                     samples_x[-1:] = value_dict["cond_frames_without_noise"]
                 samples = torch.clamp((samples_x + 1.0) / 2.0, min=0.0, max=1.0)
@@ -385,9 +397,9 @@ def load_model(
 
     config.model.params.sampler_config.params.verbose = verbose
     config.model.params.sampler_config.params.num_steps = num_steps
-    config.model.params.sampler_config.params.guider_config.params.num_frames = (
-        num_frames
-    )
+    # config.model.params.sampler_config.params.guider_config.params.num_frames = (
+    #     num_frames
+    # ) remove this
     if device == "cuda":
         with torch.device(device):
             model = instantiate_from_config(config.model).to(device).eval()

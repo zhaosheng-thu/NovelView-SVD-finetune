@@ -239,6 +239,9 @@ class ObjaverseData(Dataset):
 
         with open(os.path.join(root_dir, 'valid_paths.json')) as f:
             self.paths = json.load(f)
+            
+        new_paths = self.paths.copy()
+        self.paths.extend(new_paths)
            
         for i in range(len(self.paths)):
             self.paths[i] = self.paths[i].split("/")[-1][:-4]

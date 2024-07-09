@@ -88,8 +88,8 @@ class StandardDiffusionLoss(nn.Module):
         model_output = denoiser(
             network, noised_input, sigmas, cond, **additional_model_inputs
         )
-        print("model_output shape in loss.py", model_output.shape)
         w = append_dims(self.loss_weighting(sigmas), input.ndim)
+        print("model_output shape in loss.py", model_output.shape, "w shape in loss.py", w)
         return self.get_loss(model_output, input, w)
 
     def get_loss(self, model_output, target, w):
@@ -119,6 +119,6 @@ class NVDiffusionLoss(StandardDiffusionLoss):
         
         cond = conditioner(batch)
         print("cond_keys in loss.py", cond.keys()) # TODO: check cond_keys and val shape
-        for k, v in cond.items():
-            print("in loss.py", k, v.shape)
+        # for k, v in cond.items():
+        #     print("in loss.py", k, v.shape)
         return self._forward(network, denoiser, cond, input, batch)

@@ -1,5 +1,5 @@
 model:
-  base_learning_rate: 2.0e-5 #
+  base_learning_rate: 5.0e-5 #
   target: sgm.models.diffusion.DiffusionEngine
   params:
     scale_factor: 0.18215
@@ -84,19 +84,19 @@ model:
                   target: torch.nn.Identity
 
         - input_key: cond_aug
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
             outdim: 256 # changed
 
         - input_key: polars_rad
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
             outdim: 512
 
         - input_key: azimuths_rad
-          is_trainable: False
+          is_trainable: True
           target: sgm.modules.encoders.modules.NVConcatTimestepEmbedderND
           params:
             outdim: 512
@@ -203,7 +203,7 @@ lightning: # lightning_config
     benchmark: True
     num_sanity_val_steps: 0
     accumulate_grad_batches: 1
-    max_epochs: 5
+    max_epochs: 10
     precision: '16-mixed'
 
 # num_frame and depth

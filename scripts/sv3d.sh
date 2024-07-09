@@ -6,16 +6,18 @@ python scripts/sampling/simple_video_sample.py \
 
 python scripts/sampling/simple_video_sample.py \
     --input_path /root/zyma/szhao-06/datasets/svd-sv3d/sv3d-0.jpg \
-    --version sv3d_u \
-
-python scripts/sampling/simple_video_sample.py \
-    --input_path /root/zyma/szhao-06/datasets/svd-sv3d/sv3d-0.jpg \
     --version sv3d_p \
     --elevations_deg 1.0
 
 python scripts/sampling/simple_3d_sample.py \
     --input_path /root/zyma/szhao-06/datasets/svd-sv3d/sv3d-0.jpg \
     --version sv3d_c \
+    --elevations_deg 1.0
+
+python scripts/sampling/simple_3d_sample.py \
+    --input_path /root/zyma/szhao-06/datasets/svd-sv3d/sv3d-0.jpg \
+    --version nv3d_p \
+    --image_resolution 256 \
     --elevations_deg 1.0
 
 python main.py \

@@ -65,7 +65,7 @@ class NVDenoiser(Denoiser):
         if num_frames != 1: # for SV3D, not NV
             input = rearrange(input, "b f ... -> (b f) ...")
         num_frames = self.depth # change here
-        print("input.shape in denoiser.py", input.shape)
+        print("input.shape in denoiser.py", input.shape, "sigma.shape", sigma.shape)
         # similar to the process in sampler
         for k in ["crossattn", "concat"]: 
             cond[k] = repeat(cond[k], "b ... -> b t ...", t=num_frames)
