@@ -21,9 +21,9 @@ python scripts/sampling/simple_3d_sample.py \
     --elevations_deg 1.0
 
 python main.py \
-    --name SV3D-256 \
+    --name SV3D-576 \
     --base configs/example_training/svd/sv3d.yaml \
-    --projectname SV3D-fine-tune-256 \
+    --projectname SV3D-fine-tune-576 \
     --no-test \
     --wandb
 

@@ -26,7 +26,7 @@
 /objaverse-rendering-*
 /data
 /model_licenses
-/views_release
+/views_*
 
 CODEOWNERS
 LICENSE-CODE

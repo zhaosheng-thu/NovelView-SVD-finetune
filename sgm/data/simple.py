@@ -237,11 +237,8 @@ class ObjaverseData(Dataset):
         if not isinstance(ext, (tuple, list, ListConfig)):
             ext = [ext]
 
-        with open(os.path.join(root_dir, 'valid_paths.json')) as f:
+        with open(os.path.join(root_dir, 'valid_paths_pt.json')) as f:
             self.paths = json.load(f)
-            
-        new_paths = self.paths.copy()
-        self.paths.extend(new_paths)
            
         for i in range(len(self.paths)):
             self.paths[i] = self.paths[i].split("/")[-1][:-4]
@@ -595,7 +592,7 @@ class SV3DObjaverseData(ObjaverseData):
             cond_im, _ = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_cond))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
         except:
-            filename = os.path.join(self.root_dir, '0a8c36767de249e89fe822f48249c10c') # this one we know is valid
+            filename = os.path.join(self.root_dir, '0a3b9bfdd9964e4db0f4e737d0983a00') # this one we know is valid
             cond_im, _ = self.load_image_sv3d(os.path.join(filename, '%03d.png' % index_cond))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
             cond_im = torch.zeros_like(cond_im)

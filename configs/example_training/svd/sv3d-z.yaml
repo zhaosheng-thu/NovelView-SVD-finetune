@@ -164,9 +164,9 @@ model:
 data:
   target: sgm.data.simple.SV3DObjaverseDataModuleFromConfig
   params:
-    root_dir: '/root/zyma/szhao-06/generative-models/objaverse-rendering-video'
+    root_dir: '/root/zyma/szhao-06/generative-models/views_video_576'
     batch_size: 1 ### maybe now we could only support batch_size=1
-    num_workers: 1 ### check
+    num_workers: 0 ### check
     total_view: 21
     train:
       validation: False
@@ -185,9 +185,9 @@ lightning: # lightning_config
       every_n_train_steps: 500
       
   trainer: # trainer_config
-    devices: 0,1
+    devices: 0,1,2,3
     benchmark: True
     num_sanity_val_steps: 0
     accumulate_grad_batches: 1
-    max_epochs: 5
+    max_epochs: 10
     precision: '16-mixed'
